@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import FocsCoordinator
+from .entity import focs_device_info
 
 
 async def async_setup_entry(
@@ -41,6 +42,7 @@ class FocsCountSensor(CoordinatorEntity[FocsCoordinator], SensorEntity):
     def __init__(self, coordinator: FocsCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_count"
+        self._attr_device_info = focs_device_info(entry)
 
     @property
     def native_value(self) -> int:
@@ -59,6 +61,7 @@ class FocsNearestSensor(CoordinatorEntity[FocsCoordinator], SensorEntity):
     def __init__(self, coordinator: FocsCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_nearest"
+        self._attr_device_info = focs_device_info(entry)
 
     @property
     def native_value(self) -> float | None:

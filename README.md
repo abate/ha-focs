@@ -6,18 +6,28 @@ a location. Built to be installed via [HACS](https://hacs.xyz).
 ## What you get
 
 - **Entities** (for dashboards / state automations):
-  - `binary_sensor.<name>_fire_nearby` — on when ≥1 fire is in range. Attributes
-    include `count`, `nearest_distance_km`, `nearest_location` and the full
-    `fires` list.
+  - `binary_sensor.<name>_fire_nearby` — on when ≥1 fire is in range. Attributes:
+    `count`, `nearest_distance_km`, `nearest_location`, and `fires` — a list of
+    the full per-fire detail (see fields below).
   - `sensor.<name>_fires_in_range` — count of in-range fires.
   - `sensor.<name>_nearest_fire_distance` — km to the closest fire.
-- **Events** (for per-fire notifications): `focs_fire_detected` is fired on the
-  HA event bus for each newly-detected fire, with this data:
+  - **`geo_location` entities** — one per in-range fire, created/removed as fires
+    come and go. They plot automatically on HA's **Map** card via
+    `geo_location_sources: [focs]`, and each marker carries the full detail as
+    attributes.
+- **Events** (for per-fire notifications): `focs_fire_detected` fires on the HA
+  event bus for each newly-detected fire.
 
-  ```
-  id, status, type, location, latitude, longitude, ops,
-  distance_km, when_last_time, url
-  ```
+Every fire (event payload, `fires` attribute, and map-marker attributes) carries
+the same normalized fields, derived from the focs.cat / bomberscat data:
+
+```
+id, status, type, location, latitude, longitude, distance_km,
+ops, radius, fire_trucks, firefighters, helicopters, planes, burnt_area,
+is_forest_fire, is_controlled, is_stabilized, is_extinguished,
+description (bomberscat tweet text), tweet_url, media (photo/video URLs),
+source, last_update (epoch ms), url (focs.cat fire page)
+```
 
 ## Install (HACS)
 
@@ -60,6 +70,18 @@ automation:
             {{ trigger.event.data.url }}
 ```
 
+## Dashboard
+
+A ready view is in [`dashboard/focs_dashboard.yaml`](dashboard/focs_dashboard.yaml):
+a **Map** of the fires, a glance of the summary sensors, and a Markdown card that
+lists each fire with its description, resource counts, the bomberscat photo, and
+links to focs.cat and the source tweet.
+
+Add it via **Dashboard → Edit → ⋮ → Raw configuration editor** (paste under
+`views:`), or add the cards individually with **Add card → Manual**. Adjust the
+entity IDs if your device name differs (the Map card needs none — it reads the
+`focs` geo_location source directly).
+
 ## Notes
 
 - On startup the integration seeds the "already seen" set from the first poll,
@@ -72,4 +94,3 @@ automation:
   focs.cat rotates it, update `ANON_KEY` in `const.py`.
 - Repo is assumed at `github.com/abate/ha-focs`; update URLs in `manifest.json`
   and the blueprint `source_url` if you name it differently.
-```

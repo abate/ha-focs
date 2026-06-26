@@ -41,11 +41,22 @@ condition:
     value_template: "{{ ops >= (min_ops | int(0)) }}"
 
 action:
+  - variables:
+      d: "{{ trigger.event.data }}"
+      photos: >-
+        {{ (d.media or []) | select('search', '(?i)\.(jpg|jpeg|png)') | list }}
   - service: !input notify_service
     data:
       title: >-
-        🔥 {{ trigger.event.data.status }} fire {{ trigger.event.data.distance_km }} km away
+        🔥 {{ d.status }} fire {{ d.distance_km }} km away
       message: >-
-        {{ trigger.event.data.type }} — {{ trigger.event.data.location }}
-        (ops={{ trigger.event.data.ops }})
-        {{ trigger.event.data.url }}
+        {{ d.type }} — {{ d.location }}{% if d.ops %} · {{ d.ops }} resources{% endif %}
+        {% if d.description %}
+
+        {{ d.description }}{% endif %}
+
+        {{ d.url }}
+      data:
+        # mobile_app shows this as the notification image; ignored by notifiers
+        # that don't support it.
+        image: "{{ photos[0] if photos else none }}"

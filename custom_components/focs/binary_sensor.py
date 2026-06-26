@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import FocsCoordinator
+from .entity import focs_device_info
 
 
 async def async_setup_entry(
@@ -34,6 +35,7 @@ class FocsNearbyBinarySensor(CoordinatorEntity[FocsCoordinator], BinarySensorEnt
     def __init__(self, coordinator: FocsCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_fire_nearby"
+        self._attr_device_info = focs_device_info(entry)
 
     @property
     def is_on(self) -> bool:
@@ -45,23 +47,8 @@ class FocsNearbyBinarySensor(CoordinatorEntity[FocsCoordinator], BinarySensorEnt
         nearest = fires[0] if fires else None
         return {
             "count": len(fires),
-            "nearest_distance_km": nearest.get("_distance_km") if nearest else None,
-            "nearest_location": (
-                nearest.get("where_geolocation_full")
-                or nearest.get("where_geolocation")
-                if nearest
-                else None
-            ),
-            "fires": [
-                {
-                    "id": f.get("id"),
-                    "status": f.get("status"),
-                    "location": f.get("where_geolocation_full")
-                    or f.get("where_geolocation"),
-                    "distance_km": f.get("_distance_km"),
-                    "ops": f.get("ops"),
-                    "url": f"https://focs.cat/fire/{f.get('id')}",
-                }
-                for f in fires
-            ],
+            "nearest_distance_km": nearest["distance_km"] if nearest else None,
+            "nearest_location": nearest["location"] if nearest else None,
+            # Full per-fire detail (location, resources, description, media, …).
+            "fires": fires,
         }

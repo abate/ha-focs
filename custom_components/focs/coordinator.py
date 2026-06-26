@@ -43,6 +43,62 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def _to_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _yes(value: Any) -> bool:
+    """focs.cat encodes booleans as the strings 'yes'/'no'."""
+    if isinstance(value, str):
+        return value.strip().lower() == "yes"
+    return bool(value)
+
+
+def normalize_fire(raw: dict[str, Any], distance_km: float) -> dict[str, Any]:
+    """Project a raw focs.cat row into a clean, UI/notification-friendly dict."""
+    fid = raw.get("id")
+    return {
+        "id": fid,
+        "status": raw.get("status"),
+        "type": raw.get("type"),
+        "location": raw.get("where_geolocation_full") or raw.get("where_geolocation"),
+        "latitude": _to_float(raw.get("latitude")),
+        "longitude": _to_float(raw.get("longitude")),
+        "distance_km": round(distance_km, 2),
+        "ops": _to_int(raw.get("ops")),
+        "radius": raw.get("radius"),
+        "fire_trucks": _to_int(raw.get("total_fire_trucks")),
+        "firefighters": _to_int(raw.get("total_firefighters")),
+        "helicopters": _to_int(raw.get("total_helicopters")),
+        "planes": _to_int(raw.get("total_planes")),
+        "burnt_area": raw.get("total_burnt_area_iso"),
+        "is_forest_fire": _yes(raw.get("is_forest_fire")),
+        "is_controlled": _yes(raw.get("is_controlled_fire")),
+        "is_stabilized": _yes(raw.get("is_stabilized_fire")),
+        "is_extinguished": _yes(raw.get("is_extinguished_fire")),
+        "description": raw.get("tweet_text"),
+        "tweet_url": raw.get("tweet_url"),
+        "media": raw.get("tweet_media_array"),
+        "source": raw.get("source"),
+        "last_update": (
+            raw.get("when_last_time")
+            or raw.get("when_timestamp")
+            or raw.get("tweet_timestamp")
+        ),
+        "url": f"https://focs.cat/fire/{fid}",
+    }
+
+
 class FocsCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
     """Polls the focs.cat backend and keeps the list of in-range fires."""
 
@@ -68,9 +124,7 @@ class FocsCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
         session = async_get_clientsession(self.hass)
         url = (
             f"{SUPABASE_URL}/rest/v1/fires"
-            "?select=id,where_geolocation,where_geolocation_full,status,type,"
-            "latitude,longitude,ops,when_last_time,radius"
-            "&order=when_last_time.desc&limit=2000"
+            "?select=*&order=when_last_time.desc&limit=2000"
         )
         headers = {"apikey": ANON_KEY, "Authorization": f"Bearer {ANON_KEY}"}
         async with session.get(url, headers=headers, timeout=30) as resp:
@@ -85,19 +139,14 @@ class FocsCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
 
         matches: list[dict[str, Any]] = []
         for f in raw:
-            lat, lon = f.get("latitude"), f.get("longitude")
+            lat, lon = _to_float(f.get("latitude")), _to_float(f.get("longitude"))
             if lat is None or lon is None:
-                continue
-            try:
-                lat, lon = float(lat), float(lon)
-            except (TypeError, ValueError):
                 continue
             if not self._include_all and (f.get("status") or "").lower() != "actiu":
                 continue
             dist = haversine_km(lat, lon, self._lat, self._lon)
             if dist <= self._radius:
-                f["_distance_km"] = round(dist, 2)
-                matches.append(f)
+                matches.append(normalize_fire(f, dist))
 
-        matches.sort(key=lambda x: x["_distance_km"])
+        matches.sort(key=lambda x: x["distance_km"])
         return matches

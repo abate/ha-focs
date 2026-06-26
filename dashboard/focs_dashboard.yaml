@@ -1,0 +1,59 @@
+# focs.cat dashboard view
+#
+# How to use:
+#   Dashboard -> Edit -> ⋮ -> Raw configuration editor, and add this block
+#   under `views:`. Or use "Add card -> Manual" for individual cards.
+#
+# Entity IDs assume the default device name ("focs.cat Fire Alerts"). If yours
+# differ, check Developer Tools -> States and adjust. The map needs no entity
+# IDs — it pulls fires from the geo_location source automatically.
+
+title: Fires
+path: fires
+icon: mdi:fire
+cards:
+  - type: map
+    title: Fires nearby
+    default_zoom: 11
+    geo_location_sources:
+      - focs
+    entities:
+      - zone.home
+
+  - type: glance
+    title: Status
+    columns: 3
+    entities:
+      - entity: binary_sensor.focs_cat_fire_alerts_fire_nearby
+        name: Fire nearby
+      - entity: sensor.focs_cat_fire_alerts_fires_in_range
+        name: In range
+      - entity: sensor.focs_cat_fire_alerts_nearest_fire_distance
+        name: Nearest
+
+  - type: markdown
+    title: Active fires
+    content: |
+      {% set fires = state_attr('binary_sensor.focs_cat_fire_alerts_fire_nearby', 'fires') or [] %}
+      {% if not fires %}
+      ✅ No fires within range.
+      {% else %}
+      {% for f in fires %}
+      ### 🔥 {{ f.location }}
+      **{{ f.status }}** · {{ f.type or 'Incendi' }} · **{{ f.distance_km }} km**{% if f.ops %} · {{ f.ops }} resources{% endif %}
+      {% if f.fire_trucks or f.firefighters or f.helicopters or f.planes %}
+      🚒 {{ f.fire_trucks or 0 }} · 🧑‍🚒 {{ f.firefighters or 0 }} · 🚁 {{ f.helicopters or 0 }} · ✈️ {{ f.planes or 0 }}{% if f.burnt_area %} · 🌍 {{ f.burnt_area }}{% endif %}
+      {% endif %}
+      {% if f.description %}
+
+      > {{ f.description }}
+      {% endif %}
+      {% set photos = (f.media or []) | select('search', '(?i)\.(jpg|jpeg|png)') | list %}
+      {% if photos %}
+      ![photo]({{ photos[0] }})
+      {% endif %}
+      [focs.cat]({{ f.url }}){% if f.tweet_url %} · [@bomberscat]({{ f.tweet_url }}){% endif %}
+
+      ---
+      {% endfor %}
+      {% endif %}

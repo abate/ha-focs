@@ -14,27 +14,16 @@ from .coordinator import FocsCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+    Platform.GEO_LOCATION,
+]
 
 
 def _fire_event(hass: HomeAssistant, fire: dict[str, Any]) -> None:
-    """Emit a focs_fire_detected event for one fire."""
-    hass.bus.async_fire(
-        EVENT_FIRE_DETECTED,
-        {
-            "id": fire.get("id"),
-            "status": fire.get("status"),
-            "type": fire.get("type") or "Incendi",
-            "location": fire.get("where_geolocation_full")
-            or fire.get("where_geolocation"),
-            "latitude": fire.get("latitude"),
-            "longitude": fire.get("longitude"),
-            "ops": fire.get("ops"),
-            "distance_km": fire.get("_distance_km"),
-            "when_last_time": fire.get("when_last_time"),
-            "url": f"https://focs.cat/fire/{fire.get('id')}",
-        },
-    )
+    """Emit a focs_fire_detected event carrying the full normalized fire dict."""
+    hass.bus.async_fire(EVENT_FIRE_DETECTED, dict(fire))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
