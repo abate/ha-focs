@@ -18,6 +18,7 @@ blueprint:
       default:
         - service: telegram_bot.send_message
           data:
+            parse_mode: html
             title: "{{ title }}"
             message: "{{ message }}"
       selector:
@@ -58,7 +59,7 @@ blueprint:
           name: Title template
           description: Supports templates and the `fire.*` fields.
           default: >-
-            {% if fire.change == 'status_change' %}🔥 {{ fire.location }}: {{ fire.previous_status }} → {{ fire.status }} ({{ fire.distance_km }} km){% else %}🔥 {{ fire.status }} fire {{ fire.distance_km }} km away{% endif %}
+            {% if fire.change == 'status_change' %}🔥 {{ fire.location | e }}: {{ fire.previous_status }} → {{ fire.status }} ({{ fire.distance_km }} km){% else %}🔥 {{ fire.status }} fire {{ fire.distance_km }} km away{% endif %}
           selector:
             text:
         message_template:
@@ -67,15 +68,15 @@ blueprint:
             Supports templates and the `fire.*` fields (fire.type, fire.location,
             fire.ops, fire.description, fire.url, fire.fire_trucks, ...).
           default: |-
-            {{ fire.type }} — {{ fire.location }}{% if fire.ops %} · {{ fire.ops }} resources{% endif %}
+            {{ fire.type | e }} — {{ fire.location | e }}{% if fire.ops %} · {{ fire.ops }} resources{% endif %}
             {% if fire.description %}
 
-            {{ fire.description }}{% endif %}
+            {{ fire.description | e }}{% endif %}
             {% if photos %}
 
             {{ photos[0] }}{% endif %}
 
-            [focs.cat]({{ fire.url }})
+            <a href="{{ fire.url }}">focs.cat</a>
           selector:
             text:
               multiline: true

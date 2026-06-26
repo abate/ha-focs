@@ -100,9 +100,11 @@ status-change alerts.
 The templates and the action can use the full `fire.*` object (see the field
 list above) plus `photos` (image URLs only).
 
-> Telegram note: `telegram_bot` defaults to Markdown parse mode, so `*` `_` `[`
-> in a tweet description can break formatting — add `parse_mode: html` (or
-> `text`) to the action's `data` if needed.
+> Telegram note: the default action uses `parse_mode: html` and HTML-escapes the
+> dynamic fields, so reserved characters (`.` `-` `(` `&` `<` …) don't trigger
+> Telegram "can't parse entities" errors. If you rewrite the message, keep
+> `parse_mode: html` and escape user text with `| e` (and use `<a href=…>` for
+> links), or drop `parse_mode` and send plain text.
 
 ### Or write your own automation
 
