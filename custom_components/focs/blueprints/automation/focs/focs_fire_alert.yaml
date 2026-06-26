@@ -1,0 +1,51 @@
+blueprint:
+  name: focs.cat fire alert
+  description: >
+    Send a notification (phone push, Telegram, etc.) whenever the focs.cat
+    integration detects a new fire within your configured radius.
+  domain: automation
+  source_url: https://github.com/abate/ha-focs/blob/main/custom_components/focs/blueprints/automation/focs/focs_fire_alert.yaml
+  input:
+    notify_service:
+      name: Notification service
+      description: >
+        The notify service to call, e.g. notify.mobile_app_my_phone or
+        notify.telegram. Type the exact service name.
+      selector:
+        text:
+    min_ops:
+      name: Minimum resources (ops)
+      description: >
+        Only notify if at least this many resources are deployed. Set to 0 to
+        be notified about every fire.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 200
+          mode: box
+
+mode: queued
+max: 10
+
+trigger:
+  - platform: event
+    event_type: focs_fire_detected
+
+variables:
+  min_ops: !input min_ops
+  ops: "{{ (trigger.event.data.ops | default(0)) | int(0) }}"
+
+condition:
+  - condition: template
+    value_template: "{{ ops >= (min_ops | int(0)) }}"
+
+action:
+  - service: !input notify_service
+    data:
+      title: >-
+        🔥 {{ trigger.event.data.status }} fire {{ trigger.event.data.distance_km }} km away
+      message: >-
+        {{ trigger.event.data.type }} — {{ trigger.event.data.location }}
+        (ops={{ trigger.event.data.ops }})
+        {{ trigger.event.data.url }}

@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "focs.cat Fire Alerts",
+        "description": "Watch focs.cat for fires near a point. Defaults to your Home Assistant location.",
+        "data": {
+          "latitude": "Center latitude",
+          "longitude": "Center longitude",
+          "radius_km": "Radius (km)",
+          "scan_interval": "Scan interval (minutes)",
+          "include_all": "Include non-active fires (controlled / extinguished / historical)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "focs.cat options",
+        "data": {
+          "latitude": "Center latitude",
+          "longitude": "Center longitude",
+          "radius_km": "Radius (km)",
+          "scan_interval": "Scan interval (minutes)",
+          "include_all": "Include non-active fires (controlled / extinguished / historical)"
+        }
+      }
+    }
+  }
+}

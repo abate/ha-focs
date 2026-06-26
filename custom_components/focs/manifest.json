@@ -1,0 +1,12 @@
+{
+  "domain": "focs",
+  "name": "focs.cat Fire Alerts",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/abate/ha-focs",
+  "issue_tracker": "https://github.com/abate/ha-focs/issues",
+  "codeowners": ["@abate"],
+  "iot_class": "cloud_polling",
+  "integration_type": "service",
+  "requirements": []
+}
