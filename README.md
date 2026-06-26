@@ -16,7 +16,9 @@ a location. Built to be installed via [HACS](https://hacs.xyz).
     `geo_location_sources: [focs]`, and each marker carries the full detail as
     attributes.
 - **Events** (for per-fire notifications): `focs_fire_detected` fires on the HA
-  event bus for each newly-detected fire.
+  event bus when a fire **enters range** (`change: "new"`) and when a tracked
+  fire's **status changes** (`change: "status_change"`, with `previous_status`
+  set). See [When you get notified](#when-you-get-notified) for the details.
 
 Every fire (event payload, `fires` attribute, and map-marker attributes) carries
 the same normalized fields, derived from the focs.cat / bomberscat data:
@@ -28,6 +30,26 @@ is_forest_fire, is_controlled, is_stabilized, is_extinguished,
 description (bomberscat tweet text), tweet_url, media (photo/video URLs),
 source, last_update (epoch ms), url (focs.cat fire page)
 ```
+
+The event payload additionally carries `change` (`"new"` | `"status_change"`)
+and `previous_status` (the prior status on a change, else `null`).
+
+### When you get notified
+
+`focs_fire_detected` fires once per **new** fire entering range, and again each
+time a tracked fire's **status changes**. On startup the last-seen state is
+seeded from the first poll, so the existing backlog never notifies — only fires
+that appear or change *after* setup do. A fire that leaves range and later
+re-enters is treated as new again.
+
+> **Status changes are only seen for fires that stay in the tracked set.** In the
+> default *active-only* mode the integration keeps only `Actiu` fires, so a fire
+> going `Actiu → Controlat` **drops out** of the set and the transition isn't
+> reported (you still get the initial "new active fire" alert). To receive
+> status-change notifications, enable **Include non-active fires** in the
+> integration's *Configure* so fires are tracked across transitions, then use the
+> blueprint's **Statuses** filter to limit which ones notify (e.g. `Actiu`,
+> `Controlat`, `Estabilitzat`, `Extingit` — excluding `Falsa Alarma`).
 
 ## Install (HACS)
 
@@ -68,7 +90,12 @@ groups:
   default action injects them via `{{ title }}` / `{{ message }}`. Editing these
   fields changes what Telegram sends — **as long as the action keeps those
   references**. If you replace the action with a literal message, the Message
-  section is no longer used.
+  section is no longer used. The default title shows the transition on a status
+  change (e.g. `🔥 …: Actiu → Controlat`) via `fire.change` / `fire.previous_status`.
+
+This triggers on both new fires and status changes — see
+[When you get notified](#when-you-get-notified) for how to actually receive the
+status-change alerts.
 
 The templates and the action can use the full `fire.*` object (see the field
 list above) plus `photos` (image URLs only).
