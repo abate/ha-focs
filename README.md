@@ -40,18 +40,44 @@ source, last_update (epoch ms), url (focs.cat fire page)
 
 ## Get notified
 
-The integration only emits events/entities — it does not send messages itself
-(so you choose phone vs. Telegram vs. anything). A blueprint is bundled:
+The integration only emits events/entities — it does not send messages itself,
+so you choose where alerts go. A blueprint, `focs.cat fire alert`, is bundled.
 
-1. **Settings → Automations & Scenes → Blueprints → Import blueprint** is *not*
-   needed — because the blueprint ships inside the integration it appears under
-   **Create automation → focs.cat fire alert** after install/restart.
-2. Pick your notify service (e.g. `notify.mobile_app_my_phone` or
-   `notify.telegram`), optionally a minimum `ops` threshold, and save.
+**Add the blueprint.** Import it by URL (the most reliable way for a custom
+integration) — **Settings → Automations & Scenes → Blueprints → Import
+Blueprint**, paste:
 
-> Why a separate step? An integration cannot know *which* phone or Telegram chat
-> to message, so the notify target must be chosen by you. The blueprint reduces
-> that to a one-field form.
+```
+https://raw.githubusercontent.com/abate/ha-focs/main/custom_components/focs/blueprints/automation/focs/focs_fire_alert.yaml
+```
+
+Then **Create Automation → from blueprint → focs.cat fire alert**. It has three
+groups:
+
+- **Notification action** — an action selector (the service field autocompletes).
+  The default sends a **Telegram bot** message — `telegram_bot.send_photo` with
+  the fire photo when one exists, else `telegram_bot.send_message` — to all
+  allowed chat IDs of the `telegram_bot` integration. Edit it to target a
+  specific chat (add `target: <chat_id>`) or to send a phone push
+  (`notify.mobile_app_*`) instead. *(The Telegram default needs the
+  [`telegram_bot`](https://www.home-assistant.io/integrations/telegram_bot/)
+  integration configured.)*
+- **Filters** — notify only when the fire matches: **Statuses** (multi-select;
+  empty = any) and **Forest fires only**.
+- **Message** — **Title** and **Message** templates. Both are rendered into the
+  `title` / `message` variables (with the `fire.*` fields resolved) and the
+  default action injects them via `{{ title }}` / `{{ message }}`. Editing these
+  fields changes what Telegram sends — **as long as the action keeps those
+  references**. If you replace the action with a literal message, the Message
+  section is no longer used.
+
+The templates and the action can use the full `fire.*` object (see the field
+list above) plus `photos` (image URLs only).
+
+> Telegram notes: `telegram_bot` defaults to Markdown parse mode, so `*` `_` `[`
+> in a tweet description can break formatting — add `parse_mode: html` (or
+> `text`) to the action's `data` if needed. `send_photo` captions are limited to
+> ~1024 chars.
 
 ### Or write your own automation
 
