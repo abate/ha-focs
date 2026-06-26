@@ -55,9 +55,8 @@ Then **Create Automation → from blueprint → focs.cat fire alert**. It has th
 groups:
 
 - **Notification action** — an action selector (the service field autocompletes).
-  The default sends a **Telegram bot** message — `telegram_bot.send_photo` with
-  the fire photo when one exists, else `telegram_bot.send_message` — to all
-  allowed chat IDs of the `telegram_bot` integration. Edit it to target a
+  The default sends a **Telegram bot** message (`telegram_bot.send_message`) to
+  all allowed chat IDs of the `telegram_bot` integration. Edit it to target a
   specific chat (add `target: <chat_id>`) or to send a phone push
   (`notify.mobile_app_*`) instead. *(The Telegram default needs the
   [`telegram_bot`](https://www.home-assistant.io/integrations/telegram_bot/)
@@ -74,10 +73,9 @@ groups:
 The templates and the action can use the full `fire.*` object (see the field
 list above) plus `photos` (image URLs only).
 
-> Telegram notes: `telegram_bot` defaults to Markdown parse mode, so `*` `_` `[`
+> Telegram note: `telegram_bot` defaults to Markdown parse mode, so `*` `_` `[`
 > in a tweet description can break formatting — add `parse_mode: html` (or
-> `text`) to the action's `data` if needed. `send_photo` captions are limited to
-> ~1024 chars.
+> `text`) to the action's `data` if needed.
 
 ### Or write your own automation
 

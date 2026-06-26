@@ -11,24 +11,15 @@ blueprint:
       name: Notification action
       description: >
         What to do when a matching fire is detected. Defaults to a Telegram bot
-        message (with the fire photo when available) sent to all allowed chat
-        IDs of the telegram_bot integration. To send elsewhere — a phone push
-        (notify.mobile_app_*), a specific Telegram chat (add `target:`), etc. —
-        edit the action; the service field autocompletes.
+        message sent to all allowed chat IDs of the telegram_bot integration.
+        To send elsewhere — a phone push (notify.mobile_app_*), a specific
+        Telegram chat (add `target:`), etc. — edit the action; the service field
+        autocompletes.
       default:
-        - if:
-            - condition: template
-              value_template: "{{ photos | count > 0 }}"
-          then:
-            - service: telegram_bot.send_photo
-              data:
-                url: "{{ photos[0] }}"
-                caption: "{{ title }}\n{{ message }}"
-          else:
-            - service: telegram_bot.send_message
-              data:
-                title: "{{ title }}"
-                message: "{{ message }}"
+        - service: telegram_bot.send_message
+          data:
+            title: "{{ title }}"
+            message: "{{ message }}"
       selector:
         action: {}
 
