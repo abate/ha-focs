@@ -1,7 +1,7 @@
 {
   "domain": "focs",
   "name": "focs.cat Fire Alerts",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "config_flow": true,
   "documentation": "https://github.com/abate/ha-focs",
   "issue_tracker": "https://github.com/abate/ha-focs/issues",
