@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <clipPath id="round">
+      <rect x="0" y="0" width="256" height="256" rx="52" ry="52"/>
+    </clipPath>
+  </defs>
+
+  <!-- Catalan senyera: gold field with four red stripes (9 equal bands) -->
+  <g clip-path="url(#round)">
+    <rect width="256" height="256" fill="#FCDD09"/>
+    <g fill="#DA121A">
+      <rect y="28.4"  width="256" height="28.4"/>
+      <rect y="85.3"  width="256" height="28.4"/>
+      <rect y="142.2" width="256" height="28.4"/>
+      <rect y="199.1" width="256" height="28.4"/>
+    </g>
+  </g>
+
+  <!-- Flame: flat fills, white outline to lift it off the stripes -->
+  <g transform="translate(128,132)">
+    <!-- white halo / outline -->
+    <path fill="#FFFFFF"
+          d="M0,-78 C 30,-44 52,-30 52,6 C 52,44 26,70 0,70 C -26,70 -52,44 -52,6
+             C -52,-22 -34,-30 -22,-50 C -16,-32 -6,-30 -2,-44 C 4,-58 -6,-66 0,-78 Z"
+          transform="scale(1.16)"/>
+    <!-- outer flame -->
+    <path fill="#FF5A1F"
+          d="M0,-78 C 30,-44 52,-30 52,6 C 52,44 26,70 0,70 C -26,70 -52,44 -52,6
+             C -52,-22 -34,-30 -22,-50 C -16,-32 -6,-30 -2,-44 C 4,-58 -6,-66 0,-78 Z"/>
+    <!-- inner flame -->
+    <path fill="#FFC400"
+          d="M0,-26 C 18,-8 26,6 26,24 C 26,46 13,60 0,60 C -13,60 -26,46 -26,24
+             C -26,6 -13,-6 0,-26 Z"/>
+  </g>
+</svg>
