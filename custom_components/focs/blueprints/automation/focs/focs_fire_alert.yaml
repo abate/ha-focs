@@ -6,13 +6,32 @@ blueprint:
   domain: automation
   source_url: https://github.com/abate/ha-focs/blob/main/custom_components/focs/blueprints/automation/focs/focs_fire_alert.yaml
   input:
-    notify_service:
-      name: Notification service
+    notify_action:
+      name: Notification action
       description: >
-        The notify service to call, e.g. notify.mobile_app_my_phone or
-        notify.telegram. Type the exact service name.
+        What to do when a fire is detected. The default sends a notification —
+        open it, pick your notify service (autocompletes, e.g.
+        notify.mobile_app_my_phone or notify.telegram), and tweak the message
+        if you like. You can reference the fire via `fire.*`
+        (fire.status, fire.location, fire.distance_km, fire.ops,
+        fire.description, fire.url, fire.media, ...).
+      default:
+        - service: notify.notify
+          data:
+            title: "🔥 {{ fire.status }} fire {{ fire.distance_km }} km away"
+            message: >-
+              {{ fire.type }} — {{ fire.location }}{% if fire.ops %} · {{ fire.ops }} resources{% endif %}
+              {% if fire.description %}
+
+              {{ fire.description }}{% endif %}
+
+              {{ fire.url }}
+            data:
+              # mobile_app shows this as the notification image; ignored by
+              # notifiers that don't support it.
+              image: "{{ photos[0] if photos else none }}"
       selector:
-        text:
+        action: {}
     min_ops:
       name: Minimum resources (ops)
       description: >
@@ -34,29 +53,13 @@ trigger:
 
 variables:
   min_ops: !input min_ops
+  fire: "{{ trigger.event.data }}"
   ops: "{{ (trigger.event.data.ops | default(0)) | int(0) }}"
+  photos: >-
+    {{ (trigger.event.data.media or []) | select('search', '(?i)\.(jpg|jpeg|png)') | list }}
 
 condition:
   - condition: template
     value_template: "{{ ops >= (min_ops | int(0)) }}"
 
-action:
-  - variables:
-      d: "{{ trigger.event.data }}"
-      photos: >-
-        {{ (d.media or []) | select('search', '(?i)\.(jpg|jpeg|png)') | list }}
-  - service: !input notify_service
-    data:
-      title: >-
-        🔥 {{ d.status }} fire {{ d.distance_km }} km away
-      message: >-
-        {{ d.type }} — {{ d.location }}{% if d.ops %} · {{ d.ops }} resources{% endif %}
-        {% if d.description %}
-
-        {{ d.description }}{% endif %}
-
-        {{ d.url }}
-      data:
-        # mobile_app shows this as the notification image; ignored by notifiers
-        # that don't support it.
-        image: "{{ photos[0] if photos else none }}"
+action: !input notify_action
