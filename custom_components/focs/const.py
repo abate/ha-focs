@@ -30,3 +30,7 @@ DEFAULT_INCLUDE_ALL = False
 
 # Event fired when a new (or newly-active) fire is detected in range.
 EVENT_FIRE_DETECTED = "focs_fire_detected"
+
+# Custom Lovelace card, served and auto-registered by the integration.
+CARD_URL = "/focs_frontend/focs-fire-card.js"
+CARD_VERSION = "0.0.2"

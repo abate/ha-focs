@@ -72,15 +72,32 @@ automation:
 
 ## Dashboard
 
-A ready view is in [`dashboard/focs_dashboard.yaml`](dashboard/focs_dashboard.yaml):
-a **Map** of the fires, a glance of the summary sensors, and a Markdown card that
-lists each fire with its description, resource counts, the bomberscat photo, and
-links to focs.cat and the source tweet.
+### Custom card (no setup)
 
-Add it via **Dashboard → Edit → ⋮ → Raw configuration editor** (paste under
-`views:`), or add the cards individually with **Add card → Manual**. Adjust the
-entity IDs if your device name differs (the Map card needs none — it reads the
-`focs` geo_location source directly).
+The integration ships a custom Lovelace card and **auto-registers it** — no HACS
+frontend plugin, no Lovelace resource, no YAML to paste. After installing/updating
+and restarting HA, add it from **Add card → search "focs.cat Fire card"**, or with
+one line:
+
+```yaml
+type: custom:focs-fire-card
+# title: Fires nearby      # optional
+# entity: binary_sensor.…  # optional; auto-detected otherwise
+```
+
+It renders each in-range fire with status, distance, resources, the bomberscat
+description and photo, and links to focs.cat and the source tweet. Pair it with a
+built-in **Map** card (`geo_location_sources: [focs]`) for positions.
+
+> If the card type is "not found" right after updating, hard-refresh the browser
+> (Ctrl/Cmd-Shift-R) to clear the cached frontend.
+
+### Full YAML view (alternative)
+
+A ready view is in [`dashboard/focs_dashboard.yaml`](dashboard/focs_dashboard.yaml):
+a Map, a glance of the summary sensors, and a Markdown card. Add it via
+**Dashboard → Edit → ⋮ → Raw configuration editor** (paste under `views:`).
+Adjust the entity IDs if your device name differs.
 
 ## Notes
 
