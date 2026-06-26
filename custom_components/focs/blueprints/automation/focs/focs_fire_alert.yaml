@@ -57,7 +57,8 @@ blueprint:
         title_template:
           name: Title template
           description: Supports templates and the `fire.*` fields.
-          default: "🔥 {{ fire.status }} fire {{ fire.distance_km }} km away"
+          default: >-
+            {% if fire.change == 'status_change' %}🔥 {{ fire.location }}: {{ fire.previous_status }} → {{ fire.status }} ({{ fire.distance_km }} km){% else %}🔥 {{ fire.status }} fire {{ fire.distance_km }} km away{% endif %}
           selector:
             text:
         message_template:

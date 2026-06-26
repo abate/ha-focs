@@ -38,9 +38,18 @@ async def _register_frontend(hass: HomeAssistant) -> None:
     store["_frontend_registered"] = True
 
 
-def _fire_event(hass: HomeAssistant, fire: dict[str, Any]) -> None:
-    """Emit a focs_fire_detected event carrying the full normalized fire dict."""
-    hass.bus.async_fire(EVENT_FIRE_DETECTED, dict(fire))
+def _fire_event(
+    hass: HomeAssistant, fire: dict[str, Any], change: str, previous_status: Any
+) -> None:
+    """Emit a focs_fire_detected event with the full fire dict plus change info.
+
+    `change` is "new" (first time seen in range) or "status_change".
+    `previous_status` is the prior status on a status change, else None.
+    """
+    data = dict(fire)
+    data["change"] = change
+    data["previous_status"] = previous_status
+    hass.bus.async_fire(EVENT_FIRE_DETECTED, data)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -50,16 +59,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = FocsCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
 
-    # Seed known IDs from the first refresh so we don't blast events for the
-    # full backlog on startup; only genuinely new fires trigger notifications.
-    coordinator.known_ids = {f.get("id") for f in coordinator.data}
+    # Seed last-seen statuses from the first refresh so we don't blast events
+    # for the full backlog on startup; only fires that appear (or change status)
+    # after setup trigger notifications.
+    coordinator.seen = {f.get("id"): f.get("status") for f in coordinator.data}
 
     @callback
     def _handle_update() -> None:
         for fire in coordinator.data:
-            if fire.get("id") not in coordinator.known_ids:
-                _fire_event(hass, fire)
-        coordinator.known_ids = {f.get("id") for f in coordinator.data}
+            fid = fire.get("id")
+            if fid not in coordinator.seen:
+                _fire_event(hass, fire, "new", None)
+            elif coordinator.seen[fid] != fire.get("status"):
+                _fire_event(hass, fire, "status_change", coordinator.seen[fid])
+        coordinator.seen = {f.get("id"): f.get("status") for f in coordinator.data}
 
     entry.async_on_unload(coordinator.async_add_listener(_handle_update))
 

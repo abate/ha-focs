@@ -110,8 +110,9 @@ class FocsCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
         self._include_all = bool(opts.get(CONF_INCLUDE_ALL, DEFAULT_INCLUDE_ALL))
         interval = int(opts.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
 
-        # IDs of fires already reported, so we only fire an event for new ones.
-        self.known_ids: set[Any] = set()
+        # Last-seen status per fire id, so we fire an event for new fires and
+        # for fires whose status changed.
+        self.seen: dict[Any, Any] = {}
 
         super().__init__(
             hass,
