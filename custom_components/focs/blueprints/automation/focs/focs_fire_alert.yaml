@@ -70,8 +70,11 @@ blueprint:
             {% if fire.description %}
 
             {{ fire.description }}{% endif %}
+            {% if photos %}
 
-            {{ fire.url }}
+            {{ photos[0] }}{% endif %}
+
+            [focs.cat]({{ fire.url }})
           selector:
             text:
               multiline: true
