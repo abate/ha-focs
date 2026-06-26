@@ -10,19 +10,25 @@ blueprint:
     notify_action:
       name: Notification action
       description: >
-        What to do when a matching fire is detected. The default sends a
-        notification using the title/message below — open it and pick your
-        notify service (autocompletes, e.g. notify.mobile_app_my_phone or
-        notify.telegram).
+        What to do when a matching fire is detected. Defaults to a Telegram bot
+        message (with the fire photo when available) sent to all allowed chat
+        IDs of the telegram_bot integration. To send elsewhere — a phone push
+        (notify.mobile_app_*), a specific Telegram chat (add `target:`), etc. —
+        edit the action; the service field autocompletes.
       default:
-        - service: notify.notify
-          data:
-            title: "{{ title }}"
-            message: "{{ message }}"
-            data:
-              # mobile_app shows this as the notification image; ignored by
-              # notifiers that don't support it.
-              image: "{{ photos[0] if photos else none }}"
+        - if:
+            - condition: template
+              value_template: "{{ photos | count > 0 }}"
+          then:
+            - service: telegram_bot.send_photo
+              data:
+                url: "{{ photos[0] }}"
+                caption: "{{ title }}\n{{ message }}"
+          else:
+            - service: telegram_bot.send_message
+              data:
+                title: "{{ title }}"
+                message: "{{ message }}"
       selector:
         action: {}
 
@@ -31,28 +37,6 @@ blueprint:
       icon: mdi:filter
       collapsed: true
       input:
-        min_ops:
-          name: Minimum resources (ops)
-          description: Only notify if at least this many resources are deployed.
-          default: 0
-          selector:
-            number:
-              min: 0
-              max: 200
-              mode: box
-        max_distance_km:
-          name: Maximum distance (km)
-          description: >
-            Only notify if the fire is within this distance. 0 = no limit (use
-            the integration's configured radius).
-          default: 0
-          selector:
-            number:
-              min: 0
-              max: 200
-              step: 0.5
-              mode: box
-              unit_of_measurement: km
         statuses:
           name: Statuses
           description: Only notify for these statuses. Leave empty to allow any.
@@ -110,11 +94,8 @@ trigger:
 
 variables:
   fire: "{{ trigger.event.data }}"
-  ops: "{{ (trigger.event.data.ops | default(0)) | int(0) }}"
   photos: >-
     {{ (trigger.event.data.media or []) | select('search', '(?i)\.(jpg|jpeg|png)') | list }}
-  min_ops: !input min_ops
-  max_distance: !input max_distance_km
   statuses: !input statuses
   forest_only: !input forest_only
   title: !input title_template
@@ -123,10 +104,7 @@ variables:
 condition:
   - condition: template
     value_template: >-
-      {{ ops >= (min_ops | int(0))
-         and (max_distance | float(0) == 0
-              or (fire.distance_km | float(9999)) <= (max_distance | float(0)))
-         and (statuses | length == 0 or fire.status in statuses)
+      {{ (statuses | length == 0 or fire.status in statuses)
          and (not forest_only or fire.is_forest_fire) }}
 
 action: !input notify_action
