@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.components.geo_location import DOMAIN as GEO_DOMAIN
 from homeassistant.components.geo_location import GeolocationEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -27,6 +29,15 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    # Purge registry entries left behind by versions that gave fire markers
+    # a unique_id: markers are transient, but registered entities come back
+    # as unavailable "restored" stubs on every restart and accumulate
+    # forever (one per historical fire).
+    ent_reg = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if reg_entry.domain == GEO_DOMAIN:
+            ent_reg.async_remove(reg_entry.entity_id)
+
     coordinator: FocsCoordinator = hass.data[DOMAIN][entry.entry_id]
     manager = FocsGeoManager(hass, coordinator, async_add_entities)
     entry.async_on_unload(coordinator.async_add_listener(manager.sync))
@@ -75,10 +86,13 @@ class FocsGeoEvent(CoordinatorEntity[FocsCoordinator], GeolocationEvent):
     _attr_icon = "mdi:fire"
     _attr_unit_of_measurement = UnitOfLength.KILOMETERS
 
+    # Deliberately no unique_id: markers are transient map events. A
+    # unique_id would register each fire in the entity registry, where it
+    # outlives the fire as a permanently-unavailable restored entity.
+
     def __init__(self, coordinator: FocsCoordinator, fire_id: Any) -> None:
         super().__init__(coordinator)
         self.fire_id = fire_id
-        self._attr_unique_id = f"focs_fire_{fire_id}"
 
     def _fire(self) -> dict[str, Any]:
         for f in self.coordinator.data or []:
