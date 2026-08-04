@@ -52,7 +52,7 @@ cards:
       {% if photos %}
       ![photo]({{ photos[0] }})
       {% endif %}
-      [focs.cat]({{ f.url }}){% if f.tweet_url %} · [@bomberscat]({{ f.tweet_url }}){% endif %}
+      [focs.cat]({{ f.url }}){% if f.tweet_url %} · [@bomberscat]({{ f.tweet_url }}){% endif %}{% if f.latitude and f.longitude %} · [map](https://www.openstreetmap.org/?mlat={{ f.latitude }}&mlon={{ f.longitude }}#map=14/{{ f.latitude }}/{{ f.longitude }}){% endif %}
 
       ---
       {% endfor %}

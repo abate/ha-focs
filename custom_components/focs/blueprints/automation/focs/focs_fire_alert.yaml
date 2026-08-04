@@ -76,7 +76,7 @@ blueprint:
 
             {{ photos[0] }}{% endif %}
 
-            <a href="{{ fire.url }}">focs.cat</a>
+            <a href="{{ fire.url }}">focs.cat</a>{% if fire.latitude and fire.longitude %} · <a href="https://www.openstreetmap.org/?mlat={{ fire.latitude }}&mlon={{ fire.longitude }}#map=14/{{ fire.latitude }}/{{ fire.longitude }}">map</a>{% endif %}
           selector:
             text:
               multiline: true
