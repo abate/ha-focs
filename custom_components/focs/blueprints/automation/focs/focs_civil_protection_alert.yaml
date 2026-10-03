@@ -1,0 +1,148 @@
+blueprint:
+  name: Catalan civil protection plan alert
+  description: >
+    Send a notification whenever a Catalan civil protection plan (INFOCAT,
+    INUNCAT, NEUCAT, …) is activated, changes phase, gets a new communiqué or is
+    deactivated. These are the plans ES-Alert phone broadcasts are sent under;
+    the ES-Alert text itself is not published anywhere machine-readable.
+    Requires the focs.cat integration with "civil protection plans" enabled.
+  domain: automation
+  source_url: https://github.com/abate/ha-focs/blob/main/custom_components/focs/blueprints/automation/focs/focs_civil_protection_alert.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: >
+        What to do on a matching plan change. Defaults to a Telegram bot
+        message sent to all allowed chat IDs of the telegram_bot integration.
+        Besides `title` and `message`, the action can use `key` (stable per
+        plan, e.g. civil_protection_INUNCAT), `level` (critical for
+        EMERGÈNCIA, else warning) and `is_clear` (true when the plan was
+        deactivated) to drive an alert board that opens and closes cards.
+      default:
+        - service: telegram_bot.send_message
+          data:
+            parse_mode: html
+            title: "{{ title }}"
+            message: "{{ message }}"
+      selector:
+        action: {}
+
+    filters:
+      name: Filters
+      icon: mdi:filter
+      collapsed: true
+      input:
+        changes:
+          name: Changes
+          description: Which kinds of change notify you.
+          default: [activated, phase_change, update, deactivated]
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Plan activated
+                  value: activated
+                - label: Phase changed
+                  value: phase_change
+                - label: New communiqué, same phase
+                  value: update
+                - label: Plan deactivated
+                  value: deactivated
+        min_phase:
+          name: Minimum phase
+          description: >
+            Ignore plans below this phase. A change is still notified when the
+            plan was at or above it before (e.g. ALERTA → PREALERTA).
+          default: "2"
+          selector:
+            select:
+              options:
+                - label: PREALERTA
+                  value: "1"
+                - label: ALERTA
+                  value: "2"
+                - label: EMERGÈNCIA
+                  value: "3"
+        plans:
+          name: Plans
+          description: Only notify for these plans. Leave empty to allow any.
+          default: []
+          selector:
+            select:
+              multiple: true
+              custom_value: true
+              options:
+                - INFOCAT
+                - INUNCAT
+                - NEUCAT
+                - VENTCAT
+                - SISMICAT
+                - ALLAUCAT
+                - CAMCAT
+                - PLASEQCAT
+                - TRANSCAT
+                - RADCAT
+                - AEROCAT
+                - PENTA
+                - PROCICAT
+
+    message:
+      name: Message
+      icon: mdi:message-text
+      collapsed: true
+      input:
+        title_template:
+          name: Title template
+          description: Supports templates and the `plan.*` fields.
+          default: >-
+            {% if plan.change == 'deactivated' %}✅ {{ plan.plan }} desactivat{% elif plan.change == 'phase_change' %}🚨 {{ plan.plan }}: {{ plan.previous_phase }} → {{ plan.phase }}{% elif plan.change == 'update' %}🚨 {{ plan.plan }} {{ plan.phase }}: nou comunicat{% else %}🚨 {{ plan.plan }} en {{ plan.phase }}{% endif %}
+          selector:
+            text:
+        message_template:
+          name: Message template
+          description: >
+            Supports templates and the `plan.*` fields (plan.plan, plan.risk,
+            plan.phase, plan.since, plan.description, plan.bulletin_url,
+            plan.change, plan.previous_phase, ...).
+          default: |-
+            {% if plan.risk %}{{ plan.risk | e }}{% endif %}{% if plan.since %} · des de {{ as_timestamp(plan.since) | timestamp_custom('%d/%m %H:%M') }}{% endif %}
+            {% if plan.description %}
+
+            {{ plan.description | e }}{% endif %}
+
+            {% if plan.bulletin_url %}<a href="{{ plan.bulletin_url }}">comunicat</a> · {% endif %}<a href="{{ plan.url }}">Protecció Civil</a>
+          selector:
+            text:
+              multiline: true
+
+mode: queued
+max: 10
+
+trigger:
+  - platform: event
+    event_type: focs_civil_protection_plan
+
+variables:
+  plan: "{{ trigger.event.data }}"
+  changes: !input changes
+  min_phase: !input min_phase
+  plans: !input plans
+  ranks: "{{ {'PREALERTA': 1, 'ALERTA': 2, 'EMERGENCIA': 3} }}"
+  previous_rank: >-
+    {{ ranks.get((plan.previous_phase or '') | upper
+        | replace('È', 'E') | replace('É', 'E'), 0) }}
+  key: "civil_protection_{{ plan.plan }}"
+  level: "{{ 'critical' if (plan.phase_rank | int(0)) >= 3 else 'warning' }}"
+  is_clear: "{{ plan.change == 'deactivated' }}"
+  title: !input title_template
+  message: !input message_template
+
+condition:
+  - condition: template
+    value_template: >-
+      {{ plan.change in changes
+         and (plans | length == 0 or plan.plan in plans)
+         and ([plan.phase_rank | int(0), previous_rank | int(0)] | max)
+             >= (min_phase | int(2)) }}
+
+action: !input notify_action

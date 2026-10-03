@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import timedelta
+import unicodedata
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ANON_KEY,
@@ -24,6 +26,10 @@ from .const import (
     DEFAULT_LONGITUDE,
     DEFAULT_RADIUS_KM,
     DEFAULT_SCAN_INTERVAL,
+    PHASE_RANK,
+    PLAN_RISKS,
+    PLANS_PAGE_URL,
+    PLANS_URL,
     SUPABASE_URL,
 )
 
@@ -135,7 +141,7 @@ class FocsCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
     async def _async_update_data(self) -> list[dict[str, Any]]:
         try:
             raw = await self._fetch_fires()
-        except Exception as err:  # noqa: BLE001 - surfaced to HA as UpdateFailed
+        except Exception as err:
             raise UpdateFailed(f"Error fetching focs.cat data: {err}") from err
 
         matches: list[dict[str, Any]] = []
@@ -151,3 +157,90 @@ class FocsCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
 
         matches.sort(key=lambda x: x["distance_km"])
         return matches
+
+
+def plans_key(entry: ConfigEntry) -> str:
+    """hass.data[DOMAIN] key of an entry's PlansCoordinator."""
+    return f"{entry.entry_id}_plans"
+
+
+def phase_key(phase: Any) -> str:
+    """'Emergència' -> 'EMERGENCIA': accent-stripped, upper-case."""
+    text = unicodedata.normalize("NFKD", str(phase or "")).encode("ascii", "ignore")
+    return text.decode().strip().upper()
+
+
+def _plan_time(value: Any) -> str | None:
+    """'03/10/2026 12:59' (Catalan local time) -> ISO 8601 with offset."""
+    if not value:
+        return None
+    try:
+        # The dataset gives Catalan wall-clock time; the zone is attached below.
+        naive = datetime.strptime(str(value).strip(), "%d/%m/%Y %H:%M")  # noqa: DTZ007
+    except ValueError:
+        return str(value)
+    return naive.replace(tzinfo=dt_util.get_time_zone("Europe/Madrid")).isoformat()
+
+
+def _url(value: Any) -> str | None:
+    """Socrata URL columns come as {"url": ...}."""
+    if isinstance(value, dict):
+        return value.get("url")
+    return value or None
+
+
+def normalize_plan(raw: dict[str, Any]) -> dict[str, Any]:
+    """Project a raw plans-dataset row into a clean dict."""
+    acronym = raw.get("plaacronim") or raw.get("planom")
+    phase = raw.get("plafase")
+    return {
+        "id": acronym,
+        "plan": acronym,
+        "name": raw.get("planom") or acronym,
+        "risk": PLAN_RISKS.get(str(acronym or "").upper()),
+        "phase": phase,
+        "phase_rank": PHASE_RANK.get(phase_key(phase), 0),
+        "active": str(raw.get("plaactivat") or "").strip().upper() == "SI",
+        "since": _plan_time(raw.get("fasedatahora")),
+        "description": raw.get("descripcio"),
+        "bulletin_url": _url(raw.get("comunicatpdf")),
+        "icon_url": _url(raw.get("plaicona")),
+        "url": PLANS_PAGE_URL,
+    }
+
+
+class PlansCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
+    """Polls the Generalitat's live list of activated civil protection plans.
+
+    Catalonia-wide: the dataset has no geometry (affected comarques are only
+    in the linked bulletin PDF), so no radius filter applies.
+    """
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        opts = {**entry.data, **entry.options}
+        interval = int(opts.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+
+        # Last-seen (phase, since, bulletin) per plan; None until the first
+        # successful poll seeds it, so a startup backlog never notifies.
+        self.seen: dict[Any, tuple] | None = None
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="Catalonia civil protection plans",
+            update_interval=timedelta(minutes=interval),
+        )
+
+    async def _async_update_data(self) -> list[dict[str, Any]]:
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(PLANS_URL, timeout=30) as resp:
+                resp.raise_for_status()
+                raw = await resp.json()
+        except Exception as err:
+            raise UpdateFailed(f"Error fetching civil protection plans: {err}") from err
+
+        plans = [normalize_plan(r) for r in raw if r.get("plafase")]
+        plans = [p for p in plans if p["active"] and p["plan"]]
+        plans.sort(key=lambda p: (-p["phase_rank"], p["plan"]))
+        return plans

@@ -12,8 +12,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 
-from .const import CARD_URL, CARD_VERSION, DOMAIN, EVENT_FIRE_DETECTED
-from .coordinator import FocsCoordinator
+from .const import (
+    CARD_URL,
+    CARD_VERSION,
+    CONF_CIVIL_PROTECTION,
+    DEFAULT_CIVIL_PROTECTION,
+    DOMAIN,
+    EVENT_FIRE_DETECTED,
+    EVENT_PLAN_CHANGED,
+)
+from .coordinator import FocsCoordinator, PlansCoordinator, plans_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +60,62 @@ def _fire_event(
     hass.bus.async_fire(EVENT_FIRE_DETECTED, data)
 
 
+def _plan_state(plan: dict[str, Any]) -> tuple:
+    return (plan.get("phase"), plan.get("since"), plan.get("bulletin_url"))
+
+
+def _plan_event(
+    hass: HomeAssistant,
+    plan: dict[str, Any],
+    change: str,
+    previous_phase: Any,
+) -> None:
+    """Emit a focs_civil_protection_plan event.
+
+    `change` is "activated", "phase_change", "update" (same phase, new
+    timestamp or bulletin) or "deactivated" (the plan left the dataset).
+    """
+    data = dict(plan)
+    data["change"] = change
+    data["previous_phase"] = previous_phase
+    hass.bus.async_fire(EVENT_PLAN_CHANGED, data)
+
+
+async def _setup_plans(hass: HomeAssistant, entry: ConfigEntry) -> PlansCoordinator:
+    """Start the civil protection plans poller and its change events."""
+    plans = PlansCoordinator(hass, entry)
+    # Not first_refresh: the Generalitat portal being down must not stop the
+    # fire alerts from loading. Entities show unavailable until it answers.
+    await plans.async_refresh()
+    last: dict[Any, dict[str, Any]] = {}
+
+    @callback
+    def _handle_plans() -> None:
+        nonlocal last
+        if not plans.last_update_success:
+            return
+        current = {p["id"]: p for p in plans.data}
+        if plans.seen is not None:
+            for pid, plan in current.items():
+                if pid not in plans.seen:
+                    _plan_event(hass, plan, "activated", None)
+                elif plans.seen[pid] != _plan_state(plan):
+                    prev = plans.seen[pid][0]
+                    change = "phase_change" if prev != plan["phase"] else "update"
+                    _plan_event(hass, plan, change, prev)
+            for pid, state in plans.seen.items():
+                if pid not in current:
+                    gone = dict(last.get(pid) or {"id": pid, "plan": pid, "name": pid})
+                    gone["active"] = False
+                    _plan_event(hass, gone, "deactivated", state[0])
+        plans.seen = {pid: _plan_state(p) for pid, p in current.items()}
+        last = current
+
+    entry.async_on_unload(plans.async_add_listener(_handle_plans))
+    _handle_plans()  # seed from the first poll, if it succeeded
+    return plans
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up focs.cat from a config entry."""
     await _register_frontend(hass)
@@ -77,6 +141,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(coordinator.async_add_listener(_handle_update))
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    opts = {**entry.data, **entry.options}
+    if opts.get(CONF_CIVIL_PROTECTION, DEFAULT_CIVIL_PROTECTION):
+        hass.data[DOMAIN][plans_key(entry)] = await _setup_plans(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
@@ -92,4 +159,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        hass.data[DOMAIN].pop(plans_key(entry), None)
     return unloaded

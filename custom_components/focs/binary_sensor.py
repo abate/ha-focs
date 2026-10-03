@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import FocsCoordinator
+from .coordinator import FocsCoordinator, PlansCoordinator, plans_key
 from .entity import focs_device_info
 
 
@@ -22,7 +22,11 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: FocsCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([FocsNearbyBinarySensor(coordinator, entry)])
+    entities: list[BinarySensorEntity] = [FocsNearbyBinarySensor(coordinator, entry)]
+    plans: PlansCoordinator | None = hass.data[DOMAIN].get(plans_key(entry))
+    if plans is not None:
+        entities.append(CivilProtectionBinarySensor(plans, entry))
+    async_add_entities(entities)
 
 
 class FocsNearbyBinarySensor(CoordinatorEntity[FocsCoordinator], BinarySensorEntity):
@@ -51,4 +55,35 @@ class FocsNearbyBinarySensor(CoordinatorEntity[FocsCoordinator], BinarySensorEnt
             "nearest_location": nearest["location"] if nearest else None,
             # Full per-fire detail (location, resources, description, media, …).
             "fires": fires,
+        }
+
+
+class CivilProtectionBinarySensor(
+    CoordinatorEntity[PlansCoordinator], BinarySensorEntity
+):
+    """On when any Catalan civil protection plan is in pre-alert or higher."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Civil protection plan active"
+    _attr_device_class = BinarySensorDeviceClass.SAFETY
+    _attr_icon = "mdi:shield-alert"
+
+    def __init__(self, coordinator: PlansCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_civil_protection"
+        self._attr_device_info = focs_device_info(entry)
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        plans = self.coordinator.data or []
+        top = plans[0] if plans else None
+        return {
+            "count": len(plans),
+            "highest_phase": top["phase"] if top else None,
+            # Full per-plan detail (phase, since, description, bulletin_url, …).
+            "plans": plans,
         }

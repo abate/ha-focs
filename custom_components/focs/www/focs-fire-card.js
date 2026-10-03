@@ -1,7 +1,8 @@
 // focs.cat Fire Alerts — custom Lovelace card.
 // Served and auto-registered by the integration; no manual resource needed.
 // Usage:  type: custom:focs-fire-card
-// Options: entity (optional, auto-detected), title (optional).
+// Options: entity (optional, auto-detected), title (optional),
+//          plans_entity (optional, auto-detected), show_plans (default true).
 
 const IMG_RE = /\.(jpe?g|png)(\?|$)/i;
 
@@ -16,20 +17,29 @@ class FocsFireCard extends HTMLElement {
     const entityId = this._resolveEntity(hass);
     const state = entityId ? hass.states[entityId] : undefined;
     const fires = (state && state.attributes && state.attributes.fires) || [];
-    // Only re-render when the fire data actually changes.
-    const key = JSON.stringify([entityId, state && state.state, fires]);
+    const plansId =
+      this._config.show_plans === false
+        ? undefined
+        : this._config.plans_entity || this._findEntity(hass, "plans");
+    const plansState = plansId ? hass.states[plansId] : undefined;
+    const plans = (plansState && plansState.attributes.plans) || [];
+    // Only re-render when the fire or plan data actually changes.
+    const key = JSON.stringify([entityId, state && state.state, fires, plans]);
     if (key === this._lastKey) return;
     this._lastKey = key;
-    this._render(entityId, state, fires);
+    this._render(entityId, state, fires, plans);
   }
 
   _resolveEntity(hass) {
-    if (this._config.entity) return this._config.entity;
-    // Auto-detect: a binary_sensor exposing a `fires` attribute.
+    return this._config.entity || this._findEntity(hass, "fires");
+  }
+
+  // Auto-detect: a binary_sensor exposing a list attribute of this name.
+  _findEntity(hass, attr) {
     for (const id of Object.keys(hass.states)) {
       if (
         id.startsWith("binary_sensor.") &&
-        Array.isArray(hass.states[id].attributes.fires)
+        Array.isArray(hass.states[id].attributes[attr])
       ) {
         return id;
       }
@@ -37,7 +47,7 @@ class FocsFireCard extends HTMLElement {
     return undefined;
   }
 
-  _render(entityId, state, fires) {
+  _render(entityId, state, fires, plans) {
     if (!this._card) {
       this._card = document.createElement("ha-card");
       this._body = document.createElement("div");
@@ -56,21 +66,62 @@ class FocsFireCard extends HTMLElement {
       return;
     }
 
+    const plansHtml = plans.map((p) => this._planHtml(p)).join("");
     if (!fires.length) {
       this._body.innerHTML =
+        plansHtml +
         '<p style="color:var(--secondary-text-color)">✅ No fires within range.</p>';
       return;
     }
 
-    this._body.innerHTML = fires.map((f) => this._fireHtml(f)).join("");
+    this._body.innerHTML = plansHtml + fires.map((f) => this._fireHtml(f)).join("");
+  }
+
+  _planHtml(p) {
+    const esc = this._esc;
+    const colour =
+      p.phase_rank >= 3
+        ? "var(--error-color)"
+        : p.phase_rank === 2
+          ? "var(--warning-color)"
+          : "var(--secondary-text-color)";
+    const since = p.since
+      ? new Date(p.since).toLocaleString([], {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+    const links = [];
+    if (p.bulletin_url)
+      links.push(
+        `<a href="${esc(p.bulletin_url)}" target="_blank" rel="noopener">comunicat</a>`
+      );
+    if (p.url)
+      links.push(`<a href="${esc(p.url)}" target="_blank" rel="noopener">Protecció Civil</a>`);
+    return `
+      <div style="padding:12px 0 12px 10px;border-left:4px solid ${colour};
+                  border-bottom:1px solid var(--divider-color)">
+        <div style="font-weight:600;font-size:1.05em">🚨 ${esc(p.plan)} ·
+          <span style="color:${colour}">${esc(p.phase)}</span></div>
+        <div style="color:var(--secondary-text-color);margin:2px 0 6px">
+          ${esc(p.risk || "Pla de protecció civil")}${since ? ` · des de ${esc(since)}` : ""}
+        </div>
+        ${p.description ? `<div style="margin:6px 0">${esc(p.description)}</div>` : ""}
+        ${links.length ? `<div style="margin-top:4px">${links.join(" · ")}</div>` : ""}
+      </div>`;
+  }
+
+  _esc(s) {
+    return String(s == null ? "" : s).replace(
+      /[&<>"]/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+    );
   }
 
   _fireHtml(f) {
-    const esc = (s) =>
-      String(s == null ? "" : s).replace(
-        /[&<>"]/g,
-        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
-      );
+    const esc = this._esc;
     const photos = (f.media || []).filter((u) => IMG_RE.test(u));
     const res = [];
     if (f.fire_trucks) res.push(`🚒 ${f.fire_trucks}`);
@@ -112,8 +163,8 @@ class FocsFireCard extends HTMLElement {
   }
 
   getCardSize() {
-    const fires = (this._lastKey && JSON.parse(this._lastKey)[2]) || [];
-    return 1 + Math.max(1, fires.length) * 3;
+    const [, , fires = [], plans = []] = (this._lastKey && JSON.parse(this._lastKey)) || [];
+    return 1 + Math.max(1, fires.length) * 3 + plans.length * 2;
   }
 
   static getConfigElement() {
@@ -132,5 +183,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "focs-fire-card",
   name: "focs.cat Fire card",
-  description: "Nearby focs.cat fires with detail, photos, and links.",
+  description:
+    "Nearby focs.cat fires with detail, photos, and links, plus active Catalan civil protection plans.",
 });

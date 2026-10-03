@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -15,11 +14,13 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 
 from .const import (
+    CONF_CIVIL_PROTECTION,
     CONF_INCLUDE_ALL,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_RADIUS_KM,
     CONF_SCAN_INTERVAL,
+    DEFAULT_CIVIL_PROTECTION,
     DEFAULT_INCLUDE_ALL,
     DEFAULT_LATITUDE,
     DEFAULT_LONGITUDE,
@@ -51,6 +52,10 @@ def _schema(defaults: dict[str, Any], hass_lat: float, hass_lon: float) -> vol.S
             vol.Required(
                 CONF_INCLUDE_ALL,
                 default=defaults.get(CONF_INCLUDE_ALL, DEFAULT_INCLUDE_ALL),
+            ): bool,
+            vol.Required(
+                CONF_CIVIL_PROTECTION,
+                default=defaults.get(CONF_CIVIL_PROTECTION, DEFAULT_CIVIL_PROTECTION),
             ): bool,
         }
     )

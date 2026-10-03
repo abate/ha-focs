@@ -51,6 +51,53 @@ re-enters is treated as new again.
 > blueprint's **Statuses** filter to limit which ones notify (e.g. `Actiu`,
 > `Controlat`, `Estabilitzat`, `Extingit` — excluding `Falsa Alarma`).
 
+## Catalan civil protection plans (ES-Alert proxy)
+
+ES-Alert phone broadcasts are Cell Broadcast messages; their text is not
+published anywhere machine-readable. What *is* published, live, is the state of
+the Generalitat's civil protection plans — the Generalitat open-data dataset
+[Plans de protecció civil en fase de prealerta, alerta o emergència](https://analisi.transparenciacatalunya.cat/d/wj9c-j6vf)
+(`wj9c-j6vf`, no auth). Every ES-Alert in Catalonia is sent under one of these
+plans (INFOCAT, INUNCAT, NEUCAT, VENTCAT, PROCICAT, …), so a plan entering
+ALERTA or EMERGÈNCIA is the machine-readable signal for "an ES-Alert-level
+event is under way".
+
+Enabled by default (option **Also watch Catalan civil protection plans**); it
+polls at the same scan interval as the fires and is **Catalonia-wide** — the
+dataset has no geometry, the affected comarques are only in the linked
+bulletin PDF. If the Generalitat portal is down, these entities go unavailable;
+the fire entities are unaffected.
+
+- `binary_sensor.<name>_civil_protection_plan_active` — on while any plan is in
+  PREALERTA or higher. Attributes: `count`, `highest_phase`, `plans` (full
+  detail per plan).
+- `sensor.<name>_civil_protection_phase` — `none` / `prealerta` / `alerta` /
+  `emergencia` (the highest phase across plans).
+- Event **`focs_civil_protection_plan`** with `change` = `activated`,
+  `phase_change`, `update` (same phase, new timestamp or bulletin — usually new
+  restrictions) or `deactivated`, plus `previous_phase`. Startup state is seeded
+  silently, as for fires.
+
+Per-plan fields (event payload and `plans` attribute):
+
+```
+id, plan (acronym), name, risk (what the plan covers), phase (PREALERTA |
+ALERTA | EMERGÈNCIA), phase_rank (1-3), active, since (ISO 8601),
+description, bulletin_url (DOGC/communiqué PDF), icon_url, url
+```
+
+A second blueprint, **Catalan civil protection plan alert**, is bundled (import
+URL:
+`https://raw.githubusercontent.com/abate/ha-focs/main/custom_components/focs/blueprints/automation/focs/focs_civil_protection_alert.yaml`).
+Filters: change kinds, minimum phase (default ALERTA; a downgrade from at/above
+it still notifies) and plan list. Besides `title` / `message`, the action gets
+`key` (`civil_protection_<PLAN>`), `level` (`critical` for EMERGÈNCIA, else
+`warning`) and `is_clear` (true on deactivation), so it can open and close a
+card on an alert board.
+
+The custom card shows active plans above the fire list (disable with
+`show_plans: false`).
+
 ## Install (HACS)
 
 1. HACS → ⋮ → **Custom repositories** → add this repo's URL, category
@@ -136,6 +183,8 @@ one line:
 type: custom:focs-fire-card
 # title: Fires nearby      # optional
 # entity: binary_sensor.…  # optional; auto-detected otherwise
+# plans_entity: binary_sensor.…  # optional; auto-detected otherwise
+# show_plans: false              # hide civil protection plans
 ```
 
 It renders each in-range fire with status, distance, resources, the bomberscat

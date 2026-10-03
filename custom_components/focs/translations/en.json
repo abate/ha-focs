@@ -9,7 +9,8 @@
           "longitude": "Center longitude",
           "radius_km": "Radius (km)",
           "scan_interval": "Scan interval (minutes)",
-          "include_all": "Include non-active fires (controlled / extinguished / historical)"
+          "include_all": "Include non-active fires (controlled / extinguished / historical)",
+          "civil_protection": "Also watch Catalan civil protection plans (INFOCAT, INUNCAT, … — the plans ES-Alert phone alerts are sent under)"
         }
       }
     }
@@ -23,7 +24,8 @@
           "longitude": "Center longitude",
           "radius_km": "Radius (km)",
           "scan_interval": "Scan interval (minutes)",
-          "include_all": "Include non-active fires (controlled / extinguished / historical)"
+          "include_all": "Include non-active fires (controlled / extinguished / historical)",
+          "civil_protection": "Also watch Catalan civil protection plans (INFOCAT, INUNCAT, … — the plans ES-Alert phone alerts are sent under)"
         }
       }
     }

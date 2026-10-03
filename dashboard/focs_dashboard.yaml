@@ -22,7 +22,7 @@ cards:
 
   - type: glance
     title: Status
-    columns: 3
+    columns: 4
     entities:
       - entity: binary_sensor.focs_cat_fire_alerts_fire_nearby
         name: Fire nearby
@@ -30,6 +30,28 @@ cards:
         name: In range
       - entity: sensor.focs_cat_fire_alerts_nearest_fire_distance
         name: Nearest
+      - entity: sensor.focs_cat_fire_alerts_civil_protection_phase
+        name: Protecció Civil
+
+  - type: markdown
+    title: Civil protection plans
+    content: |
+      {% set plans = state_attr('binary_sensor.focs_cat_fire_alerts_civil_protection_plan_active', 'plans') or [] %}
+      {% if not plans %}
+      ✅ No civil protection plan active.
+      {% else %}
+      {% for p in plans %}
+      ### 🚨 {{ p.plan }} · {{ p.phase }}
+      {{ p.risk or 'Pla de protecció civil' }}{% if p.since %} · des de {{ as_timestamp(p.since) | timestamp_custom('%d/%m %H:%M') }}{% endif %}
+      {% if p.description %}
+
+      > {{ p.description }}
+      {% endif %}
+      {% if p.bulletin_url %}[comunicat]({{ p.bulletin_url }}) · {% endif %}[Protecció Civil]({{ p.url }})
+
+      ---
+      {% endfor %}
+      {% endif %}
 
   - type: markdown
     title: Active fires
