@@ -209,6 +209,16 @@ def normalize_plan(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _plan_rank(plan: dict[str, Any]) -> tuple:
+    """Which of a plan's rows to keep: highest phase, has a bulletin, newest."""
+    return (
+        plan["phase_rank"],
+        plan["bulletin_url"] is not None,
+        plan["since"] or "",
+        plan["description"] or "",
+    )
+
+
 class PlansCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
     """Polls the Generalitat's live list of activated civil protection plans.
 
@@ -240,7 +250,16 @@ class PlansCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
         except Exception as err:
             raise UpdateFailed(f"Error fetching civil protection plans: {err}") from err
 
-        plans = [normalize_plan(r) for r in raw if r.get("plafase")]
-        plans = [p for p in plans if p["active"] and p["plan"]]
-        plans.sort(key=lambda p: (-p["phase_rank"], p["plan"]))
+        rows = [normalize_plan(r) for r in raw if r.get("plafase")]
+        # A plan can have several rows (INUNCAT: a Catalonia-wide emergency
+        # plus a CHE Ebro-basin watch). Keep one per plan, chosen by content
+        # rather than row order, or the per-plan state flips between polls.
+        best: dict[str, dict[str, Any]] = {}
+        for p in rows:
+            if not (p["active"] and p["plan"]):
+                continue
+            cur = best.get(p["id"])
+            if cur is None or _plan_rank(p) > _plan_rank(cur):
+                best[p["id"]] = p
+        plans = sorted(best.values(), key=lambda p: (-p["phase_rank"], p["plan"]))
         return plans
