@@ -10,7 +10,8 @@
           "radius_km": "Radius (km)",
           "scan_interval": "Scan interval (minutes)",
           "include_all": "Include non-active fires (controlled / extinguished / historical)",
-          "civil_protection": "Also watch Catalan civil protection plans (INFOCAT, INUNCAT, … — the plans ES-Alert phone alerts are sent under)"
+          "civil_protection": "Also watch Catalan civil protection plans (INFOCAT, INUNCAT, … — the plans ES-Alert phone alerts are sent under)",
+          "weather_zones": "AEMET weather warning zones (MeteoAlarm EMMA_IDs, comma-separated; empty disables). ES181 = Litoral de Barcelona"
         }
       }
     }
@@ -25,7 +26,8 @@
           "radius_km": "Radius (km)",
           "scan_interval": "Scan interval (minutes)",
           "include_all": "Include non-active fires (controlled / extinguished / historical)",
-          "civil_protection": "Also watch Catalan civil protection plans (INFOCAT, INUNCAT, … — the plans ES-Alert phone alerts are sent under)"
+          "civil_protection": "Also watch Catalan civil protection plans (INFOCAT, INUNCAT, … — the plans ES-Alert phone alerts are sent under)",
+          "weather_zones": "AEMET weather warning zones (MeteoAlarm EMMA_IDs, comma-separated; empty disables). ES181 = Litoral de Barcelona"
         }
       }
     }

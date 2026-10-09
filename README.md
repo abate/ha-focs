@@ -98,6 +98,33 @@ card on an alert board.
 The custom card shows active plans above the fire list (disable with
 `show_plans: false`).
 
+## AEMET weather warnings (MeteoAlarm)
+
+The civil protection plans are Catalonia-wide and carry no geometry, so a
+VENTCAT activated for the Alt Empordà looks the same as one for your town.
+Weather warnings are local: AEMET issues them per warning zone, and
+[MeteoAlarm](https://meteoalarm.org) republishes them as an open feed (no
+auth). The integration polls that feed and keeps only the warnings that cover
+the configured zones.
+
+- **Zones**: option *AEMET weather warning zones*, a comma-separated list of
+  MeteoAlarm `EMMA_ID`s. Default `ES181` (Litoral de Barcelona). Others near
+  Barcelona: `ES180` Prelitoral, `ES179` Depresión central, `ES869` Costa -
+  Litoral de Barcelona (sea state). Empty disables the feature.
+- **Entities**: `binary_sensor.<name>_weather_warning` (on while any yellow+
+  warning is out, including ones whose onset is still ahead; attribute
+  `warnings` has the full detail) and `sensor.<name>_weather_warning_level`
+  (`none` / `yellow` / `orange` / `red`).
+- **Event** `focs_weather_warning`, once per hazard (rain, thunderstorm,
+  wind, …) when its highest level changes: `change` is `issued`,
+  `level_change` or `ended`, with `level_name`, `previous_level`,
+  `hazard_label` (Catalan), `onset`, `expires`, `description` (AEMET's
+  Spanish text) and `warnings` (every current warning for that hazard). New
+  bulletins that keep the same level do not fire, so a multi-day episode
+  notifies when it starts, when it escalates or eases, and when it ends.
+- **Blueprint** `focs_weather_warning.yaml`: filters by hazard (default rain,
+  thunderstorms, wind), minimum level (default yellow) and change type.
+
 ## Install (HACS)
 
 1. HACS → ⋮ → **Custom repositories** → add this repo's URL, category

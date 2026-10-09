@@ -21,6 +21,7 @@ CONF_RADIUS_KM = "radius_km"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_INCLUDE_ALL = "include_all"
 CONF_CIVIL_PROTECTION = "civil_protection"
+CONF_WEATHER_ZONES = "weather_zones"
 
 # Defaults (area: Santa Coloma de Gramenet / Badalona / Parc de la Serralada).
 DEFAULT_LATITUDE = 41.4517
@@ -29,6 +30,9 @@ DEFAULT_RADIUS_KM = 6.0
 DEFAULT_SCAN_INTERVAL = 5  # minutes
 DEFAULT_INCLUDE_ALL = False
 DEFAULT_CIVIL_PROTECTION = True
+# MeteoAlarm EMMA_ID of AEMET's "Litoral de Barcelona" warning zone. Empty
+# string disables weather warnings.
+DEFAULT_WEATHER_ZONES = "ES181"
 
 # Event fired when a new (or newly-active) fire is detected in range.
 EVENT_FIRE_DETECTED = "focs_fire_detected"
@@ -62,6 +66,38 @@ PLAN_RISKS = {
     "AEROCAT": "Accidents aeris",
     "PENTA": "Emergència nuclear (Tarragona)",
     "PROCICAT": "Pla territorial (calor, sequera, epidèmies, …)",
+}
+
+# MeteoAlarm (EUMETNET) Atom feed of AEMET's live warnings for Spain, per
+# warning zone (EMMA_ID), no auth. Each entry links to its full CAP message,
+# which carries the Spanish headline/description and the awareness parameters.
+METEOALARM_FEED_URL = "https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-spain"
+METEOALARM_PAGE_URL = "https://meteoalarm.org?geocode=EMMA_ID:{zone}"
+
+# Event fired when a hazard's warning level in the watched zones changes:
+# a warning is issued, its level changes, or it ends.
+EVENT_WEATHER_WARNING = "focs_weather_warning"
+
+# MeteoAlarm awareness levels (CAP severity as fallback).
+WARNING_LEVELS = {2: "yellow", 3: "orange", 4: "red"}
+SEVERITY_LEVEL = {"MODERATE": 2, "SEVERE": 3, "EXTREME": 4}
+LEVEL_LABELS = {"yellow": "groc", "orange": "taronja", "red": "vermell"}
+
+# MeteoAlarm awareness types, normalized (see normalize_hazard), with Catalan
+# labels for messages.
+HAZARD_LABELS = {
+    "wind": "Vent",
+    "snow_ice": "Neu i gel",
+    "thunderstorm": "Tempestes",
+    "fog": "Boira",
+    "high_temperature": "Calor",
+    "low_temperature": "Fred",
+    "coastal_event": "Fenòmens costaners",
+    "forest_fire": "Risc d'incendi",
+    "avalanches": "Allaus",
+    "rain": "Pluja",
+    "flooding": "Inundacions",
+    "rain_flood": "Pluja i inundacions",
 }
 
 # Custom Lovelace card, served and auto-registered by the integration.

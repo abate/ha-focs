@@ -14,7 +14,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import FocsCoordinator, PlansCoordinator, phase_key, plans_key
+from .coordinator import (
+    FocsCoordinator,
+    PlansCoordinator,
+    WeatherCoordinator,
+    phase_key,
+    plans_key,
+    weather_key,
+)
 from .entity import focs_device_info
 
 
@@ -31,6 +38,9 @@ async def async_setup_entry(
     plans: PlansCoordinator | None = hass.data[DOMAIN].get(plans_key(entry))
     if plans is not None:
         entities.append(CivilProtectionPhaseSensor(plans, entry))
+    weather: WeatherCoordinator | None = hass.data[DOMAIN].get(weather_key(entry))
+    if weather is not None:
+        entities.append(WeatherWarningLevelSensor(weather, entry))
     async_add_entities(entities)
 
 
@@ -95,3 +105,27 @@ class CivilProtectionPhaseSensor(CoordinatorEntity[PlansCoordinator], SensorEnti
     @property
     def extra_state_attributes(self) -> dict:
         return {"plans": [p["plan"] for p in self.coordinator.data or []]}
+
+
+class WeatherWarningLevelSensor(CoordinatorEntity[WeatherCoordinator], SensorEntity):
+    """Highest AEMET warning level out for the watched zones."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Weather warning level"
+    _attr_icon = "mdi:alert-outline"
+    _attr_device_class = SensorDeviceClass.ENUM
+
+    def __init__(self, coordinator: WeatherCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_options = ["none", "yellow", "orange", "red"]
+        self._attr_unique_id = f"{entry.entry_id}_weather_warning_level"
+        self._attr_device_info = focs_device_info(entry)
+
+    @property
+    def native_value(self) -> str:
+        warnings = self.coordinator.data or []
+        return warnings[0]["level_name"] if warnings else "none"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"hazards": sorted({w["hazard"] for w in self.coordinator.data or []})}

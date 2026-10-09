@@ -16,12 +16,24 @@ from .const import (
     CARD_URL,
     CARD_VERSION,
     CONF_CIVIL_PROTECTION,
+    CONF_WEATHER_ZONES,
     DEFAULT_CIVIL_PROTECTION,
+    DEFAULT_WEATHER_ZONES,
     DOMAIN,
     EVENT_FIRE_DETECTED,
     EVENT_PLAN_CHANGED,
+    EVENT_WEATHER_WARNING,
+    HAZARD_LABELS,
+    LEVEL_LABELS,
+    WARNING_LEVELS,
 )
-from .coordinator import FocsCoordinator, PlansCoordinator, plans_key
+from .coordinator import (
+    FocsCoordinator,
+    PlansCoordinator,
+    WeatherCoordinator,
+    plans_key,
+    weather_key,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -116,6 +128,79 @@ async def _setup_plans(hass: HomeAssistant, entry: ConfigEntry) -> PlansCoordina
     return plans
 
 
+def weather_zones(entry: ConfigEntry) -> set[str]:
+    """Watched MeteoAlarm zones from the comma-separated option."""
+    opts = {**entry.data, **entry.options}
+    raw = opts.get(CONF_WEATHER_ZONES, DEFAULT_WEATHER_ZONES) or ""
+    return {z.strip().upper() for z in raw.split(",") if z.strip()}
+
+
+def _weather_event(
+    hass: HomeAssistant,
+    hazard: str,
+    warnings: list[dict[str, Any]],
+    change: str,
+    previous_level: int,
+) -> None:
+    """Emit a focs_weather_warning event for one hazard.
+
+    `change` is "issued" (no warning before), "level_change" or "ended".
+    The top-level fields are those of the highest current warning for the
+    hazard (none on "ended"); `warnings` lists all of them.
+    """
+    top = warnings[0] if warnings else {}
+    level = top.get("level", 0)
+    prev_name = WARNING_LEVELS.get(previous_level)
+    data = dict(top)
+    data.update(
+        {
+            "hazard": hazard,
+            "hazard_label": HAZARD_LABELS.get(hazard, hazard),
+            "level": level,
+            "level_name": WARNING_LEVELS.get(level),
+            "level_label": LEVEL_LABELS.get(WARNING_LEVELS.get(level)),
+            "change": change,
+            "previous_level": previous_level,
+            "previous_level_name": prev_name,
+            "previous_level_label": LEVEL_LABELS.get(prev_name),
+            "warnings": warnings,
+        }
+    )
+    hass.bus.async_fire(EVENT_WEATHER_WARNING, data)
+
+
+async def _setup_weather(
+    hass: HomeAssistant, entry: ConfigEntry, zones: set[str]
+) -> WeatherCoordinator:
+    """Start the MeteoAlarm poller and its per-hazard change events."""
+    weather = WeatherCoordinator(hass, entry, zones)
+    # Not first_refresh, for the same reason as the plans poller.
+    await weather.async_refresh()
+
+    @callback
+    def _handle_weather() -> None:
+        if not weather.last_update_success:
+            return
+        by_hazard: dict[str, list[dict[str, Any]]] = {}
+        for w in weather.data:  # already sorted highest level first
+            by_hazard.setdefault(w["hazard"], []).append(w)
+        current = {h: ws[0]["level"] for h, ws in by_hazard.items()}
+        if weather.seen is not None:
+            for hazard, level in current.items():
+                prev = weather.seen.get(hazard, 0)
+                if level != prev:
+                    change = "level_change" if prev else "issued"
+                    _weather_event(hass, hazard, by_hazard[hazard], change, prev)
+            for hazard, prev in weather.seen.items():
+                if hazard not in current:
+                    _weather_event(hass, hazard, [], "ended", prev)
+        weather.seen = current
+
+    entry.async_on_unload(weather.async_add_listener(_handle_weather))
+    _handle_weather()  # seed from the first poll, if it succeeded
+    return weather
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up focs.cat from a config entry."""
     await _register_frontend(hass)
@@ -144,6 +229,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     opts = {**entry.data, **entry.options}
     if opts.get(CONF_CIVIL_PROTECTION, DEFAULT_CIVIL_PROTECTION):
         hass.data[DOMAIN][plans_key(entry)] = await _setup_plans(hass, entry)
+    if zones := weather_zones(entry):
+        hass.data[DOMAIN][weather_key(entry)] = await _setup_weather(hass, entry, zones)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
@@ -160,4 +247,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         hass.data[DOMAIN].pop(plans_key(entry), None)
+        hass.data[DOMAIN].pop(weather_key(entry), None)
     return unloaded

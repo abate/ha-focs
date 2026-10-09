@@ -12,7 +12,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import FocsCoordinator, PlansCoordinator, plans_key
+from .coordinator import (
+    FocsCoordinator,
+    PlansCoordinator,
+    WeatherCoordinator,
+    plans_key,
+    weather_key,
+)
 from .entity import focs_device_info
 
 
@@ -26,6 +32,9 @@ async def async_setup_entry(
     plans: PlansCoordinator | None = hass.data[DOMAIN].get(plans_key(entry))
     if plans is not None:
         entities.append(CivilProtectionBinarySensor(plans, entry))
+    weather: WeatherCoordinator | None = hass.data[DOMAIN].get(weather_key(entry))
+    if weather is not None:
+        entities.append(WeatherWarningBinarySensor(weather, entry))
     async_add_entities(entities)
 
 
@@ -86,4 +95,39 @@ class CivilProtectionBinarySensor(
             "highest_phase": top["phase"] if top else None,
             # Full per-plan detail (phase, since, description, bulletin_url, …).
             "plans": plans,
+        }
+
+
+class WeatherWarningBinarySensor(
+    CoordinatorEntity[WeatherCoordinator], BinarySensorEntity
+):
+    """On when AEMET has a yellow-or-higher warning out for a watched zone.
+
+    Includes warnings whose onset is still ahead (e.g. tomorrow's).
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Weather warning"
+    _attr_device_class = BinarySensorDeviceClass.SAFETY
+    _attr_icon = "mdi:weather-lightning-rainy"
+
+    def __init__(self, coordinator: WeatherCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_weather_warning"
+        self._attr_device_info = focs_device_info(entry)
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        warnings = self.coordinator.data or []
+        top = warnings[0] if warnings else None
+        return {
+            "count": len(warnings),
+            "highest_level": top["level_name"] if top else None,
+            "zones": sorted(self.coordinator.zones),
+            # Full per-warning detail (hazard, level, onset, expires, text, …).
+            "warnings": warnings,
         }

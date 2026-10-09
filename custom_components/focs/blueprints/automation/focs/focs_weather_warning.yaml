@@ -1,0 +1,153 @@
+blueprint:
+  name: AEMET weather warning alert
+  description: >
+    Send a notification when AEMET issues, raises, lowers or ends a weather
+    warning (rain, thunderstorms, wind, …) for the warning zones watched by
+    the focs.cat integration (via MeteoAlarm). One notification per hazard
+    and level change, not per bulletin. Requires the focs.cat integration
+    with at least one weather warning zone configured.
+  domain: automation
+  source_url: https://github.com/abate/ha-focs/blob/main/custom_components/focs/blueprints/automation/focs/focs_weather_warning.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: >
+        What to do on a matching change. Defaults to a Telegram bot message
+        sent to all allowed chat IDs of the telegram_bot integration. Besides
+        `title` and `message`, the action can use `key` (stable per hazard,
+        e.g. weather_rain), `level` (critical for orange and red, else
+        warning) and `is_clear` (true when the warning ended) to drive an
+        alert board that opens and closes cards.
+      default:
+        - service: telegram_bot.send_message
+          data:
+            parse_mode: html
+            title: "{{ title }}"
+            message: "{{ message }}"
+      selector:
+        action: {}
+
+    filters:
+      name: Filters
+      icon: mdi:filter
+      collapsed: true
+      input:
+        changes:
+          name: Changes
+          description: Which kinds of change notify you.
+          default: [issued, level_change, ended]
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Warning issued
+                  value: issued
+                - label: Level changed
+                  value: level_change
+                - label: Warning ended
+                  value: ended
+        min_level:
+          name: Minimum level
+          description: >
+            Ignore warnings below this level. A change is still notified when
+            the hazard was at or above it before (e.g. orange → yellow).
+          default: "2"
+          selector:
+            select:
+              options:
+                - label: Yellow
+                  value: "2"
+                - label: Orange
+                  value: "3"
+                - label: Red
+                  value: "4"
+        hazards:
+          name: Hazards
+          description: Only notify for these hazards. Leave empty to allow any.
+          default: [rain, thunderstorm, wind]
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Rain
+                  value: rain
+                - label: Thunderstorms
+                  value: thunderstorm
+                - label: Wind
+                  value: wind
+                - label: Coastal events
+                  value: coastal_event
+                - label: Snow / ice
+                  value: snow_ice
+                - label: Fog
+                  value: fog
+                - label: High temperature
+                  value: high_temperature
+                - label: Low temperature
+                  value: low_temperature
+                - label: Flooding
+                  value: flooding
+                - label: Rain / flood
+                  value: rain_flood
+                - label: Forest fire risk
+                  value: forest_fire
+                - label: Avalanches
+                  value: avalanches
+
+    message:
+      name: Message
+      icon: mdi:message-text
+      collapsed: true
+      input:
+        title_template:
+          name: Title template
+          description: Supports templates and the `warning.*` fields.
+          default: >-
+            {% set icons = {'yellow': '🟡', 'orange': '🟠', 'red': '🔴'} %}{% if warning.change == 'ended' %}✅ Fi de l'avís: {{ warning.hazard_label }}{% elif warning.change == 'level_change' %}{{ icons.get(warning.level_name, '⚠️') }} Avís {{ warning.hazard_label | lower }}: {{ warning.previous_level_label }} → {{ warning.level_label }}{% else %}{{ icons.get(warning.level_name, '⚠️') }} Avís {{ warning.level_label }}: {{ warning.hazard_label }}{% endif %}
+          selector:
+            text:
+        message_template:
+          name: Message template
+          description: >
+            Supports templates and the `warning.*` fields (warning.hazard,
+            warning.hazard_label, warning.level_name, warning.level_label,
+            warning.zone_name, warning.onset, warning.expires,
+            warning.description, warning.url, warning.change,
+            warning.warnings, ...).
+          default: |-
+            {% if warning.change == 'ended' %}{{ warning.hazard_label }}: avís finalitzat.{% else %}{{ warning.zone_name | e }}{% if warning.onset %} · {{ as_timestamp(warning.onset) | timestamp_custom('%d/%m %H:%M') }}{% endif %}{% if warning.expires %} – {{ as_timestamp(warning.expires) | timestamp_custom('%d/%m %H:%M') }}{% endif %}
+            {% if warning.description %}
+            {{ warning.description | e }}{% endif %}
+
+            <a href="{{ warning.url }}">AEMET</a>{% endif %}
+          selector:
+            text:
+              multiline: true
+
+mode: queued
+max: 10
+
+trigger:
+  - platform: event
+    event_type: focs_weather_warning
+
+variables:
+  warning: "{{ trigger.event.data }}"
+  changes: !input changes
+  min_level: !input min_level
+  hazards: !input hazards
+  key: "weather_{{ warning.hazard }}"
+  level: "{{ 'critical' if (warning.level | int(0)) >= 3 else 'warning' }}"
+  is_clear: "{{ warning.change == 'ended' }}"
+  title: !input title_template
+  message: !input message_template
+
+condition:
+  - condition: template
+    value_template: >-
+      {{ warning.change in changes
+         and (hazards | length == 0 or warning.hazard in hazards)
+         and ([warning.level | int(0), warning.previous_level | int(0)] | max)
+             >= (min_level | int(2)) }}
+
+action: !input notify_action

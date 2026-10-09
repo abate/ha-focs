@@ -20,12 +20,14 @@ from .const import (
     CONF_LONGITUDE,
     CONF_RADIUS_KM,
     CONF_SCAN_INTERVAL,
+    CONF_WEATHER_ZONES,
     DEFAULT_CIVIL_PROTECTION,
     DEFAULT_INCLUDE_ALL,
     DEFAULT_LATITUDE,
     DEFAULT_LONGITUDE,
     DEFAULT_RADIUS_KM,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_WEATHER_ZONES,
     DOMAIN,
 )
 
@@ -57,6 +59,10 @@ def _schema(defaults: dict[str, Any], hass_lat: float, hass_lon: float) -> vol.S
                 CONF_CIVIL_PROTECTION,
                 default=defaults.get(CONF_CIVIL_PROTECTION, DEFAULT_CIVIL_PROTECTION),
             ): bool,
+            vol.Optional(
+                CONF_WEATHER_ZONES,
+                default=defaults.get(CONF_WEATHER_ZONES, DEFAULT_WEATHER_ZONES),
+            ): str,
         }
     )
 

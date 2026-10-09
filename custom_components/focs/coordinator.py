@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import unicodedata
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -26,11 +27,17 @@ from .const import (
     DEFAULT_LONGITUDE,
     DEFAULT_RADIUS_KM,
     DEFAULT_SCAN_INTERVAL,
+    HAZARD_LABELS,
+    LEVEL_LABELS,
+    METEOALARM_FEED_URL,
+    METEOALARM_PAGE_URL,
     PHASE_RANK,
     PLAN_RISKS,
     PLANS_PAGE_URL,
     PLANS_URL,
+    SEVERITY_LEVEL,
     SUPABASE_URL,
+    WARNING_LEVELS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -263,3 +270,174 @@ class PlansCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
                 best[p["id"]] = p
         plans = sorted(best.values(), key=lambda p: (-p["phase_rank"], p["plan"]))
         return plans
+
+
+def weather_key(entry: ConfigEntry) -> str:
+    """hass.data[DOMAIN] key of an entry's WeatherCoordinator."""
+    return f"{entry.entry_id}_weather"
+
+
+_ATOM = "{http://www.w3.org/2005/Atom}"
+_CAP = "{urn:oasis:names:tc:emergency:cap:1.2}"
+
+
+def normalize_hazard(value: Any) -> str:
+    """'10; Rain' / 'coastalevent' / 'snow-ice' -> 'rain' / 'coastal_event' / 'snow_ice'."""
+    text = str(value or "").split(";")[-1].strip().lower().replace("-", "_")
+    return "coastal_event" if text == "coastalevent" else text
+
+
+def _parse_time(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value).strip())
+    except ValueError:
+        return None
+
+
+def _cap_details(xml_text: str) -> dict[str, Any]:
+    """Pick the Spanish (else first) info block of a CAP message."""
+    root = ET.fromstring(xml_text)
+    infos = root.findall(f"{_CAP}info")
+    if not infos:
+        return {}
+    info = next(
+        (i for i in infos if (i.findtext(f"{_CAP}language") or "").startswith("es")),
+        infos[0],
+    )
+    params = {
+        p.findtext(f"{_CAP}valueName"): p.findtext(f"{_CAP}value")
+        for p in info.findall(f"{_CAP}parameter")
+    }
+    level = _to_int(str(params.get("awareness_level") or "").split(";")[0])
+    return {
+        "event": info.findtext(f"{_CAP}event"),
+        "headline": info.findtext(f"{_CAP}headline"),
+        "description": info.findtext(f"{_CAP}description"),
+        "instruction": info.findtext(f"{_CAP}instruction"),
+        "level": level,
+        "hazard": normalize_hazard(params.get("awareness_type")) or None,
+        "web": info.findtext(f"{_CAP}web"),
+    }
+
+
+def _feed_entries(xml_text: str, zones: set[str]) -> list[dict[str, Any]]:
+    """Live entries of the MeteoAlarm Atom feed for the watched zones."""
+    root = ET.fromstring(xml_text)
+    out = []
+    for e in root.findall(f"{_ATOM}entry"):
+        zone = e.findtext(f"{_CAP}geocode/{_ATOM}value")
+        if zone not in zones:
+            continue
+        if (e.findtext(f"{_CAP}status") or "") != "Actual":
+            continue
+        if (e.findtext(f"{_CAP}message_type") or "") == "Cancel":
+            continue
+        cap_url = next(
+            (
+                link.get("href")
+                for link in e.findall(f"{_ATOM}link")
+                if link.get("type") == "application/cap+xml"
+            ),
+            None,
+        )
+        # "Moderate rain warning" -> severity + hazard.
+        event = (e.findtext(f"{_CAP}event") or "").removesuffix(" warning")
+        severity, _, hazard = event.partition(" ")
+        out.append(
+            {
+                "id": e.findtext(f"{_CAP}identifier"),
+                "zone": zone,
+                "zone_name": e.findtext(f"{_CAP}areaDesc"),
+                "hazard": normalize_hazard(hazard),
+                "level": SEVERITY_LEVEL.get(severity.upper(), 0),
+                "event": e.findtext(f"{_CAP}event"),
+                "onset": e.findtext(f"{_CAP}onset"),
+                "expires": e.findtext(f"{_CAP}expires"),
+                "cap_url": cap_url,
+            }
+        )
+    return out
+
+
+class WeatherCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
+    """Polls MeteoAlarm for AEMET weather warnings in the watched zones.
+
+    Unlike the civil protection plans, these are per warning zone (EMMA_ID),
+    so only warnings that actually cover the home area are kept.
+    """
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, zones: set[str]) -> None:
+        opts = {**entry.data, **entry.options}
+        interval = int(opts.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+        self.zones = zones
+        # Highest level per hazard; None until the first successful poll
+        # seeds it, so warnings already out at startup never notify.
+        self.seen: dict[str, int] | None = None
+        # CAP details per warning identifier; a CAP message never changes.
+        self._details: dict[str, dict[str, Any]] = {}
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="MeteoAlarm weather warnings",
+            update_interval=timedelta(minutes=interval),
+        )
+
+    async def _details_for(self, session: Any, entry: dict[str, Any]) -> dict[str, Any]:
+        wid = entry["id"]
+        if wid in self._details or not entry["cap_url"]:
+            return self._details.get(wid, {})
+        try:
+            async with session.get(entry["cap_url"], timeout=30) as resp:
+                resp.raise_for_status()
+                details = _cap_details(await resp.text())
+        except Exception as err:  # noqa: BLE001 - the feed entry alone still works
+            _LOGGER.debug("No CAP details for %s: %s", wid, err)
+            return {}
+        self._details[wid] = details
+        return details
+
+    async def _async_update_data(self) -> list[dict[str, Any]]:
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(METEOALARM_FEED_URL, timeout=30) as resp:
+                resp.raise_for_status()
+                entries = _feed_entries(await resp.text(), self.zones)
+        except Exception as err:
+            raise UpdateFailed(f"Error fetching MeteoAlarm warnings: {err}") from err
+
+        now = dt_util.utcnow()
+        warnings: list[dict[str, Any]] = []
+        for e in entries:
+            expires = _parse_time(e["expires"])
+            if expires is not None and expires <= now:
+                continue
+            d = await self._details_for(session, e)
+            level = d.get("level") or e["level"]
+            hazard = d.get("hazard") or e["hazard"]
+            if level not in WARNING_LEVELS:
+                continue  # green / unknown: nothing to warn about
+            level_name = WARNING_LEVELS[level]
+            warnings.append(
+                {
+                    "id": e["id"],
+                    "zone": e["zone"],
+                    "zone_name": e["zone_name"],
+                    "hazard": hazard,
+                    "hazard_label": HAZARD_LABELS.get(hazard, hazard),
+                    "level": level,
+                    "level_name": level_name,
+                    "level_label": LEVEL_LABELS[level_name],
+                    "onset": e["onset"],
+                    "expires": e["expires"],
+                    "event": d.get("event") or e["event"],
+                    "headline": d.get("headline"),
+                    "description": d.get("description"),
+                    "instruction": d.get("instruction"),
+                    "url": d.get("web") or METEOALARM_PAGE_URL.format(zone=e["zone"]),
+                }
+            )
+        live = {w["id"] for w in warnings}
+        self._details = {k: v for k, v in self._details.items() if k in live}
+        warnings.sort(key=lambda w: (-w["level"], w["onset"] or ""))
+        return warnings
